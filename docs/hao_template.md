@@ -3,9 +3,9 @@
 > **Instruction**: Fill in all sections below. This report is designed to be parsed by an automated grading assistant. Ensure all tags (e.g., `A04`) are preserved.
 
 ## 1. Team Metadata
-- [GROUP_NAME]: A04
-- [REPO_URL]: https://github.com/haongocng/2A202600903-NguyenNgocHao-Day13/tree/main
-- [MEMBERS]: Nguyễn Ngọc Hảo
+- GROUP_NAME: "A04"
+- REPO_URL: https://github.com/haongocng/2A202600903-NguyenNgocHao-Day13/tree/main
+- MEMBERS: Nguyễn Ngọc Hảo
   - Member A: [Name] | Role: Logging & PII
   - Member B: [Name] | Role: Tracing & Enrichment
   - Member C: [Name] | Role: SLO & Alerts
@@ -15,9 +15,9 @@
 ---
 
 ## 2. Group Performance (Auto-Verified)
-- [VALIDATE_LOGS_FINAL_SCORE]: 100/100
+- VALIDATE_LOGS_FINAL_SCORE: 100/100
 - [TOTAL_TRACES_COUNT]: at least 20 traces verified in Langfuse UI/API
-- [PII_LEAKS_FOUND]: 0
+- PII_LEAKS_FOUND: 0
 
 ---
 
