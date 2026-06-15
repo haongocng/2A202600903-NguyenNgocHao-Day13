@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Day 13 Observability Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d8dee9;
+      --accent: #0f766e;
+      --warn: #b45309;
+      --bad: #b42318;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      min-height: 178px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+
+    .panel h2 {
+      margin: 0 0 14px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .metric {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 6px 0;
+    }
+
+    .value {
+      font-size: 30px;
+      line-height: 1.1;
+      font-weight: 750;
+    }
+
+    .unit {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .subgrid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .mini {
+      padding: 10px;
+      border-radius: 6px;
+      background: #f3f5f8;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .bar {
+      position: relative;
+      height: 8px;
+      margin-top: 14px;
+      border-radius: 999px;
+      background: #e7ebf0;
+      overflow: hidden;
+    }
+
+    .fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: var(--accent);
+      transition: width 180ms ease;
+    }
+
+    .threshold {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .bad {
+      color: var(--bad);
+    }
+
+    .warn {
+      color: var(--warn);
+    }
+
+    pre {
+      margin: 10px 0 0;
+      max-height: 84px;
+      overflow: auto;
+      white-space: pre-wrap;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 900px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Day 13 Observability Dashboard</h1>
+    <div class="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">Loading metrics</span>
+    </div>
+  </header>
+  <main>
+    <section class="grid" aria-label="Observability panels">
+      <article class="panel">
+        <h2>Latency</h2>
+        <div class="subgrid">
+          <div class="mini"><div class="label">P50</div><div class="metric"><span class="value" id="p50">0</span><span class="unit">ms</span></div></div>
+          <div class="mini"><div class="label">P95</div><div class="metric"><span class="value" id="p95">0</span><span class="unit">ms</span></div></div>
+          <div class="mini"><div class="label">P99</div><div class="metric"><span class="value" id="p99">0</span><span class="unit">ms</span></div></div>
+        </div>
+        <div class="bar"><div class="fill" id="latencyFill"></div></div>
+        <div class="threshold">SLO: P95 under 3000 ms</div>
+      </article>
+
+      <article class="panel">
+        <h2>Traffic</h2>
+        <div class="metric"><span class="value" id="traffic">0</span><span class="unit">requests</span></div>
+        <div class="threshold">Auto refresh: 15 seconds</div>
+      </article>
+
+      <article class="panel">
+        <h2>Error Rate</h2>
+        <div class="metric"><span class="value" id="errorRate">0</span><span class="unit">%</span></div>
+        <pre id="errors">{}</pre>
+        <div class="threshold">SLO: error rate under 2%</div>
+      </article>
+
+      <article class="panel">
+        <h2>Cost</h2>
+        <div class="metric"><span class="value" id="totalCost">0.0000</span><span class="unit">USD total</span></div>
+        <div class="metric"><span class="value" id="avgCost">0.0000</span><span class="unit">USD avg/request</span></div>
+        <div class="threshold">Budget target: under $2.5/day</div>
+      </article>
+
+      <article class="panel">
+        <h2>Tokens</h2>
+        <div class="metric"><span class="value" id="tokensIn">0</span><span class="unit">input</span></div>
+        <div class="metric"><span class="value" id="tokensOut">0</span><span class="unit">output</span></div>
+      </article>
+
+      <article class="panel">
+        <h2>Quality</h2>
+        <div class="metric"><span class="value" id="quality">0.00</span><span class="unit">avg score</span></div>
+        <div class="bar"><div class="fill" id="qualityFill"></div></div>
+        <div class="threshold">Target: 0.75 or higher</div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const ids = {
+      p50: document.getElementById("p50"),
+      p95: document.getElementById("p95"),
+      p99: document.getElementById("p99"),
+      traffic: document.getElementById("traffic"),
+      errorRate: document.getElementById("errorRate"),
+      errors: document.getElementById("errors"),
+      totalCost: document.getElementById("totalCost"),
+      avgCost: document.getElementById("avgCost"),
+      tokensIn: document.getElementById("tokensIn"),
+      tokensOut: document.getElementById("tokensOut"),
+      quality: document.getElementById("quality"),
+      latencyFill: document.getElementById("latencyFill"),
+      qualityFill: document.getElementById("qualityFill"),
+      statusText: document.getElementById("statusText"),
+      statusDot: document.getElementById("statusDot")
+    };
+
+    function setText(node, value) {
+      node.textContent = value;
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch("/metrics", { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const errors = data.error_breakdown || {};
+        const errorCount = Object.values(errors).reduce((sum, value) => sum + Number(value || 0), 0);
+        const traffic = Number(data.traffic || 0);
+        const errorRate = traffic > 0 ? (errorCount / traffic) * 100 : 0;
+
+        setText(ids.p50, Number(data.latency_p50 || 0).toFixed(0));
+        setText(ids.p95, Number(data.latency_p95 || 0).toFixed(0));
+        setText(ids.p99, Number(data.latency_p99 || 0).toFixed(0));
+        setText(ids.traffic, traffic.toString());
+        setText(ids.errorRate, errorRate.toFixed(1));
+        setText(ids.errors, JSON.stringify(errors, null, 2));
+        setText(ids.totalCost, Number(data.total_cost_usd || 0).toFixed(4));
+        setText(ids.avgCost, Number(data.avg_cost_usd || 0).toFixed(4));
+        setText(ids.tokensIn, Number(data.tokens_in_total || 0).toString());
+        setText(ids.tokensOut, Number(data.tokens_out_total || 0).toString());
+        setText(ids.quality, Number(data.quality_avg || 0).toFixed(2));
+
+        ids.latencyFill.style.width = `${Math.min(100, (Number(data.latency_p95 || 0) / 3000) * 100)}%`;
+        ids.qualityFill.style.width = `${Math.min(100, Number(data.quality_avg || 0) * 100)}%`;
+        ids.errorRate.className = errorRate > 2 ? "value bad" : "value";
+        ids.statusDot.style.background = "#0f766e";
+        setText(ids.statusText, `Updated ${new Date().toLocaleTimeString()}`);
+      } catch (error) {
+        ids.statusDot.style.background = "#b42318";
+        setText(ids.statusText, `Metrics unavailable: ${error.message}`);
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>

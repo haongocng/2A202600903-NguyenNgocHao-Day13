@@ -80,6 +80,15 @@ class LabAgent:
             quality_score=quality_score,
         )
 
+        return AgentResult(
+            answer=response.text,
+            latency_ms=latency_ms,
+            tokens_in=response.usage.input_tokens,
+            tokens_out=response.usage.output_tokens,
+            cost_usd=cost_usd,
+            quality_score=quality_score,
+        )
+
     def _run_steps(self, message: str, feature: str, langfuse) -> tuple[list[str], Any]:
         docs = retrieve(message)
         prompt = f"Feature={feature}\nDocs={docs}\nQuestion={message}"
@@ -102,15 +111,6 @@ class LabAgent:
                 },
             )
             return docs, response
-
-        return AgentResult(
-            answer=response.text,
-            latency_ms=latency_ms,
-            tokens_in=response.usage.input_tokens,
-            tokens_out=response.usage.output_tokens,
-            cost_usd=cost_usd,
-            quality_score=quality_score,
-        )
 
     def _estimate_cost(self, tokens_in: int, tokens_out: int) -> float:
         input_cost = (tokens_in / 1_000_000) * 3

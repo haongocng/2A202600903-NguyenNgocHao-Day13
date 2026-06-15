@@ -258,7 +258,170 @@ Nhan xet:
 - UI Langfuse ban dau van hien "Waiting for first trace" khi dung SDK cu `langfuse==3.2.1`. Sau khi nang SDK len `langfuse==4.7.1` va sua instrumentation theo API moi, traces da hien thi tren UI.
 - Link truc tiep de mo trace mau tren Langfuse: `https://cloud.langfuse.com/project/cmqf9xv1i03cnad0cfwt4imzl/traces/d57beff0d5bfd545fc9260610b6d7f32`.
 
-## 9. Trang thai hien tai
+## 9. Ket qua thuc hien - Metrics snapshot
+
+Sau khi app chay va da gui requests thanh cong, toi lay metrics snapshot tu endpoint `/metrics`.
+
+Ket qua ban dau:
+
+```json
+{
+  "traffic": 10,
+  "latency_p50": 154.0,
+  "latency_p95": 161.0,
+  "latency_p99": 161.0,
+  "avg_cost_usd": 0.0021,
+  "total_cost_usd": 0.0212,
+  "tokens_in_total": 340,
+  "tokens_out_total": 1345,
+  "error_breakdown": {
+    "AttributeError": 10
+  },
+  "quality_avg": 0.88
+}
+```
+
+Nhan xet:
+
+- Traffic hien tai la `10`, tuong ung voi mot batch load test 10 requests.
+- Latency sau khi tracing da on dinh: P50 `154ms`, P95 `161ms`, P99 `161ms`.
+- Tong chi phi uoc tinh la `$0.0212`, chi phi trung binh moi request la `$0.0021`.
+- Tong token input la `340`, output la `1345`.
+- Quality average la `0.88`, dat tren SLO starter `0.75`.
+- `error_breakdown` ban dau co `AttributeError: 10`. Sau khi kiem tra log, nguyen nhan la `agent.run()` tra ve `None` do `return AgentResult(...)` bi dat sai vi tri trong luc migrate Langfuse SDK v4.
+
+Sau khi sua `agent.run()` de tra ve `AgentResult` dung cach, restart server va chay lai load test, metrics final nhu sau:
+
+```json
+{
+  "traffic": 10,
+  "latency_p50": 153.0,
+  "latency_p95": 157.0,
+  "latency_p99": 157.0,
+  "avg_cost_usd": 0.0021,
+  "total_cost_usd": 0.0211,
+  "tokens_in_total": 340,
+  "tokens_out_total": 1341,
+  "error_breakdown": {},
+  "quality_avg": 0.88
+}
+```
+
+Nhan xet sau khi sua:
+
+- `error_breakdown` da ve `{}`, chung to batch request final khong con loi runtime.
+- P95 latency `157ms`, thap hon nhieu so voi SLO starter `3000ms`.
+- Tong cost `$0.0211`, tokens in/out lan luot la `340` va `1341`.
+- Quality average `0.88`, cao hon nguong SLO starter `0.75`.
+- Dashboard 6 panels da duoc tao tai route `/dashboard`, doc truc tiep so lieu tu endpoint `/metrics`.
+
+## 10. Ket qua thuc hien - Alerting va incident evidence
+
+Toi da test alert latency bang cach bat incident `rag_slow`.
+
+Lenh bat incident:
+
+```text
+200 {'ok': True, 'incidents': {'rag_slow': True, 'tool_fail': False, 'cost_spike': False}}
+```
+
+Sau khi bat incident, toi chay load test voi `--concurrency 5`.
+
+Ket qua:
+
+```text
+[200] req-b0541b5a | qa | 8884.8ms
+[200] req-bb8b4f2a | qa | 8884.1ms
+[200] req-8c975f03 | qa | 11836.0ms
+[200] req-7753694e | summary | 14801.5ms
+[200] req-b0fa3cda | qa | 14804.9ms
+[200] req-3d49ebc9 | qa | 14838.0ms
+[200] req-875d0510 | summary | 14839.8ms
+[200] req-5590f668 | qa | 11887.3ms
+[200] req-e34e23d2 | qa | 14900.2ms
+[200] req-36d5d1f1 | qa | 14899.3ms
+```
+
+Metrics sau incident:
+
+```json
+{
+  "traffic": 20,
+  "latency_p50": 157.0,
+  "latency_p95": 2655.0,
+  "latency_p99": 2655.0,
+  "avg_cost_usd": 0.0021,
+  "total_cost_usd": 0.042,
+  "tokens_in_total": 680,
+  "tokens_out_total": 2666,
+  "error_breakdown": {},
+  "quality_avg": 0.88
+}
+```
+
+Sau khi thu evidence, toi tat incident:
+
+```text
+200 {'ok': True, 'incidents': {'rag_slow': False, 'tool_fail': False, 'cost_spike': False}}
+```
+
+Alert rule da duoc cau hinh lai trong `config/alert_rules.yaml`:
+
+```yaml
+- name: high_latency_p95
+  severity: P2
+  condition: latency_p95_ms > 2500 for 5m
+  type: symptom-based
+  owner: team-oncall
+  runbook: docs/alerts.md#1-high-latency-p95
+```
+
+Nhan xet:
+
+- Load test client-side cho thay latency tang manh tu khoang 150-800ms len khoang 8.8-14.9s.
+- Metrics endpoint ghi nhan P95 latency `2655ms`, vuot threshold alert moi `2500ms`.
+- `error_breakdown` van la `{}`, tuc incident anh huong latency nhung khong gay request failure.
+- Runbook `docs/alerts.md#1-high-latency-p95` huong dan mo traces cham, so sanh RAG span voi LLM span va kiem tra incident toggle `rag_slow`.
+- Root cause cua incident nay la `rag_slow`, lam cham retrieval/RAG pipeline. Fix action trong demo la disable incident toggle.
+
+## 11. Ket qua thuc hien - Final validation va screenshots
+
+Sau khi hoan thien logging, tracing, dashboard va alerting, toi chay lai `scripts/validate_logs.py`.
+
+Ket qua final:
+
+```text
+--- Lab Verification Results ---
+Total log records analyzed: 195
+Records with missing required fields: 0
+Records with missing enrichment (context): 0
+Unique correlation IDs found: 92
+Potential PII leaks detected: 0
+
+--- Grading Scorecard (Estimates) ---
++ [PASSED] Basic JSON schema
++ [PASSED] Correlation ID propagation
++ [PASSED] Log enrichment
++ [PASSED] PII scrubbing
+
+Estimated Score: 100/100
+```
+
+Screenshots da thu thap:
+
+- Dashboard 6 panels tai `/dashboard`: latency, traffic, error rate, cost, tokens va quality.
+- Langfuse tracing view `Root Observations`: thay cac root span `agent-run` voi trace name `chat-request`.
+- Langfuse tracing view `Generations Only`: thay cac generation `fake-llm-generate` voi input/output/model metadata.
+
+Nhan xet:
+
+- Final validation dat `100/100`, khong con thieu required fields hay enrichment fields.
+- Co `92` unique correlation IDs trong log, du bang chung correlation ID propagation.
+- Khong phat hien PII leak trong `195` log records.
+- Dashboard da hien du 6 panels theo yeu cau.
+- Langfuse da hien ca root observation va generation observation, chung to trace hierarchy da duoc tao dung.
+
+## 12. Trang thai hien tai
 
 Sau cac buoc tren, trang thai hien tai cua lab:
 
@@ -268,13 +431,29 @@ Sau cac buoc tren, trang thai hien tai cua lab:
 - Validate logs dat `100/100`.
 - JSON schema, correlation ID, log enrichment va PII scrubbing da pass.
 - Langfuse da ingest `20` traces va UI da hien thi trace sau khi nang SDK; trace mau co root span, child generation, metadata va usage/cost.
+- Metrics endpoint `/metrics` da tra ve latency, traffic, cost, tokens, error breakdown va quality score; snapshot final khong con runtime error.
+- Dashboard 6 panels da duoc tao tai `/dashboard`.
 - Incident `rag_slow` da duoc test va cho thay latency tang ro ret.
+- Alert `high_latency_p95` da duoc cau hinh threshold `2500ms for 5m` va co runbook lien ket trong `docs/alerts.md`.
+- Final validation dat `100/100`.
 
-## 10. Cac muc se cap nhat tiep
+## 13. Tong ket dong gop ca nhan
 
-Cac muc duoi day se duoc bo sung sau khi co them output/evidence:
+Trong lab nay, toi da thuc hien va thu thap evidence cho cac phan sau:
 
-- Metrics snapshot tu endpoint `/metrics`.
-- Screenshot/dashboard 6 panels.
-- Alert rules va evidence test alert.
-- Phan tong ket dong gop ca nhan cuoi cung.
+- Hoan thien correlation ID propagation bang `x-request-id`.
+- Bo sung log enrichment gom `user_id_hash`, `session_id`, `feature`, `model` va `env`.
+- Kiem tra PII scrubbing cho email, phone va credit card trong logs/traces.
+- Nang va sua Langfuse instrumentation tu SDK cu sang `langfuse==4.7.1` de UI hien thi traces dung.
+- Tao trace `chat-request` voi root observation `agent-run` va generation `fake-llm-generate`.
+- Tao dashboard 6 panels tai `/dashboard` dua tren endpoint `/metrics`.
+- Test incident `rag_slow`, phan tich latency degradation va cau hinh alert `high_latency_p95`.
+- Chay final validation va dat `100/100`.
+
+Ket qua cuoi cung:
+
+- Logging validation: `100/100`.
+- Langfuse tracing: UI hien thi root observations va generations.
+- Dashboard: du 6 panels theo yeu cau.
+- Alerting: co alert rules va runbook, da test incident latency.
+- PII: khong phat hien leak trong final validation.
